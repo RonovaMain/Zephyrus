@@ -2,13 +2,14 @@
 # Сборка:  pyinstaller --noconfirm --clean Zephyrus.spec
 # Результат: dist\Zephyrus\Zephyrus.exe (режим onedir)
 
-from PyInstaller.utils.hooks import collect_data_files, collect_binary_files
+# ИСПРАВЛЕНО: заменено collect_binary_files на collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    # Принудительно собираем все DLL-файлы для движка браузера PyQt6-WebEngine
-    binaries=collect_binary_files('PyQt6_WebEngine'),
+    # ИСПРАВЛЕНО: собираем динамические библиотеки .dll движка
+    binaries=collect_dynamic_libs('PyQt6_WebEngine'),
     # Объединяем ваши папки bin и assets с системными ресурсами PyQt6 и WebEngine
     datas=[('bin', 'bin'), ('assets', 'assets')] + collect_data_files('PyQt6_WebEngine') + collect_data_files('PyQt6'),
     # Явно указываем скрытые импорты, чтобы PyInstaller точно ничего не упустил
