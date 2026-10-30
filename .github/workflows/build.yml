@@ -34,6 +34,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: yt-dlp и FFmpeg в bin\
+        env:
+          PYTHONIOENCODING: utf-8
         run: python tools/fetch_binaries.py
 
       - name: Иконка
