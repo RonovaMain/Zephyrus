@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,7 +56,34 @@ def _prepare_cookie_file(sessions: SessionManager, url: str, session: str, tag: 
         return None
 
 
+def _descendants(pid: int) -> list[int]:
+    """Все потомки процесса (Linux): yt-dlp_linux запускает дочерний процесс, а тот — ffmpeg."""
+    children: dict[int, list[int]] = {}
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return []
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat", "rb") as fh:
+                data = fh.read()
+            ppid = int(data[data.rindex(b")") + 2:].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        children.setdefault(ppid, []).append(int(entry))
+    found: list[int] = []
+    stack = [pid]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            found.append(child)
+            stack.append(child)
+    return found
+
+
 def _kill_tree(proc: QProcess) -> None:
+    """Завершить процесс вместе с потомками, чтобы не оставались «сироты» yt-dlp/ffmpeg."""
     pid = int(proc.processId())
     if IS_WINDOWS and pid:
         try:
@@ -64,6 +92,12 @@ def _kill_tree(proc: QProcess) -> None:
             return
         except OSError:
             pass
+    elif pid:
+        for victim in reversed(_descendants(pid)):
+            try:
+                os.kill(victim, signal.SIGKILL)
+            except OSError:
+                pass
     proc.kill()
 
 
@@ -294,10 +328,20 @@ class InfoFetcher(QObject):
         proc.setProcessChannelMode(QProcess.ProcessChannelMode.SeparateChannels)
         proc.setProcessEnvironment(_env(self._engine))
         proc.finished.connect(lambda *_: self._on_finished(proc, token))
+        proc.errorOccurred.connect(lambda err: self._on_start_error(proc, token, err))
         self._proc = proc
         proc.start(str(self._engine.ytdlp_path), build_info_args(url, playlist, cookie, self._s.get("proxy")))
         self._timer.start(60_000)
         return token
+
+    def _on_start_error(self, proc: QProcess, token: int, err: QProcess.ProcessError) -> None:
+        if err != QProcess.ProcessError.FailedToStart or proc is not self._proc or token != self._token:
+            return
+        self._timer.stop()
+        self._proc = None
+        proc.deleteLater()
+        self._drop_cookies()
+        self.failed.emit("Не удалось запустить yt-dlp", token)
 
     def _drop_cookies(self) -> None:
         if self._cookie_tmp:

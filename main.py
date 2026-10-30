@@ -33,7 +33,8 @@ def setup_logging() -> None:
 
     def hook(exc_type, exc, tb) -> None:
         logging.critical("Необработанная ошибка", exc_info=(exc_type, exc, tb))
-        traceback.print_exception(exc_type, exc, tb)
+        if sys.stderr is not None:  # в оконной сборке (console=False) stderr отсутствует
+            traceback.print_exception(exc_type, exc, tb)
 
     sys.excepthook = hook
 

@@ -1,0 +1,2 @@
+# Скрипты оболочки всегда с LF, иначе на Linux ломается shebang (#!/usr/bin/env bash^M)
+*.sh text eol=lf
