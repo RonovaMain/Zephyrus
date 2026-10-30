@@ -19,6 +19,8 @@ jobs:
   build:
     runs-on: windows-latest
     env:
+      # ГЛОБАЛЬНО ВКЛЮЧАЕМ UTF-8 ДЛЯ ВСЕХ PYTHON-СКРИПТОВ
+      PYTHONIOENCODING: utf-8
       # Чтобы ЗАКРЕПИТЬ версии навсегда, впишите их сюда, например: YTDLP_VERSION: "2025.10.22"
       YTDLP_VERSION: ${{ inputs.ytdlp_version }}
       FFMPEG_VERSION: ${{ inputs.ffmpeg_version }}
@@ -34,8 +36,6 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: yt-dlp и FFmpeg в bin\
-        env:
-          PYTHONIOENCODING: utf-8
         run: python tools/fetch_binaries.py
 
       - name: Иконка
