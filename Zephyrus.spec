@@ -2,18 +2,18 @@
 # Сборка:  pyinstaller --noconfirm --clean Zephyrus.spec
 # Результат: dist\Zephyrus\Zephyrus.exe (режим onedir)
 
-# ИСПРАВЛЕНО: заменено collect_binary_files на collect_dynamic_libs
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_all
+
+# Автоматически собираем абсолютно все зависимости, бинарники и скрытые импорты для WebEngine
+datas_we, binaries_we, hiddenimports_we = collect_all('PyQt6_WebEngine')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    # ИСПРАВЛЕНО: собираем динамические библиотеки .dll движка
-    binaries=collect_dynamic_libs('PyQt6_WebEngine'),
-    # Объединяем ваши папки bin и assets с системными ресурсами PyQt6 и WebEngine
-    datas=[('bin', 'bin'), ('assets', 'assets')] + collect_data_files('PyQt6_WebEngine') + collect_data_files('PyQt6'),
-    # Явно указываем скрытые импорты, чтобы PyInstaller точно ничего не упустил
-    hiddenimports=['PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore'],
+    binaries=binaries_we,
+    # Объединяем системные файлы WebEngine с вашими личными папками bin и assets
+    datas=[('bin', 'bin'), ('assets', 'assets')] + datas_we,
+    hiddenimports=hiddenimports_we + ['PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets'],
     hookspath=[],
     runtime_hooks=[],
     excludes=['tkinter', 'unittest', 'pydoc'],
