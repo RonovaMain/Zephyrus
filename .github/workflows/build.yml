@@ -1,0 +1,77 @@
+name: Build Windows installer
+
+on:
+  push:
+    tags: ["v*"]            # git tag v1.0.0 && git push origin v1.0.0
+  workflow_dispatch:         # ручной запуск из вкладки Actions
+    inputs:
+      ytdlp_version:
+        description: "Версия yt-dlp (пусто = последняя), например 2025.10.22"
+        required: false
+      ffmpeg_version:
+        description: "Версия FFmpeg (пусто = последняя), например 7.1.1"
+        required: false
+
+permissions:
+  contents: write            # нужно, чтобы создать Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # Чтобы ЗАКРЕПИТЬ версии навсегда, впишите их сюда, например: YTDLP_VERSION: "2025.10.22"
+      YTDLP_VERSION: ${{ inputs.ytdlp_version }}
+      FFMPEG_VERSION: ${{ inputs.ffmpeg_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Зависимости Python
+        run: pip install -r requirements.txt
+
+      - name: yt-dlp и FFmpeg в bin\
+        run: python tools/fetch_binaries.py
+
+      - name: Иконка
+        run: python tools/make_icon.py
+
+      - name: PyInstaller (onedir)
+        run: pyinstaller --noconfirm --clean Zephyrus.spec
+
+      - name: Версия приложения
+        id: ver
+        shell: pwsh
+        run: |
+          $v = python -c "from zephyrus.paths import APP_VERSION; print(APP_VERSION)"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Сборка установщика
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.ver.outputs.version }}" installer\Zephyrus.iss
+
+      - name: Контрольные суммы
+        shell: pwsh
+        run: |
+          Get-ChildItem installer\Output\*.exe | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Out-File installer\Output\SHA256SUMS.txt -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zephyrus-Setup
+          path: installer/Output/*
+
+      - name: Публикация релиза
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/*
+          generate_release_notes: true
