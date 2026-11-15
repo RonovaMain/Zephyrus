@@ -9,9 +9,10 @@ from PyQt6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QListWidget
 
 from ..context import AppContext
 from ..downloader import Job
+from ..i18n import tr
 from ..sessions import site_label
 from ..utils import format_duration, format_eta, human_size, human_speed, looks_like_url, open_folder, reveal_in_folder
-from ..ytdlp_args import AUDIO_QUALITIES, VIDEO_QUALITIES
+from ..ytdlp_args import audio_qualities, video_qualities
 from .widgets import (Card, GradientButton, GradientProgressBar, RoundedImage, Segmented, ToggleSwitch,
                       make_combo, make_label, page_header, set_combo_data)
 
@@ -40,7 +41,7 @@ class DownloadPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(36, 30, 36, 30)
         root.setSpacing(18)
-        root.addWidget(page_header("Загрузка", "Вставьте ссылку на видео, плейлист или трек — Zephyrus сделает остальное."))
+        root.addWidget(page_header(tr("dl.title"), tr("dl.subtitle")))
 
         # --- ввод ---
         card = Card()
@@ -51,10 +52,10 @@ class DownloadPage(QWidget):
         row = QHBoxLayout()
         row.setSpacing(10)
         self.url = QLineEdit()
-        self.url.setPlaceholderText("https://…  ссылка на видео или плейлист")
+        self.url.setPlaceholderText(tr("dl.url_ph"))
         self.url.setClearButtonEnabled(True)
         self.url.setMinimumHeight(48)
-        self.paste_btn = QPushButton("📋  Вставить")
+        self.paste_btn = QPushButton("📋  " + tr("dl.paste"))
         self.paste_btn.setMinimumHeight(48)
         self.paste_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         row.addWidget(self.url, 1)
@@ -79,13 +80,13 @@ class DownloadPage(QWidget):
         self.preview.hide()
         cl.addWidget(self.preview)
 
-        self.segment = Segmented(["🎬  Видео MP4", "🎵  Аудио MP3"])
+        self.segment = Segmented(["🎬  " + tr("dl.seg_video", fmt="MP4"), "🎵  " + tr("dl.seg_audio", fmt="MP3")])
         cl.addWidget(self.segment)
 
-        self.qmode = Segmented(["⚡  Лучшее доступное", "🎚  Выбрать вручную"])
+        self.qmode = Segmented(["⚡  " + tr("dl.mode_best"), "🎚  " + tr("dl.mode_manual")])
         self.qmode.setEnabled(False)
         cl.addWidget(self.qmode)
-        self.qmode_hint = make_label("Ручной выбор качества видео и звука появится после анализа ссылки.", "Dim", wrap=True)
+        self.qmode_hint = make_label(tr("dl.manual_hint"), "Dim", wrap=True)
         cl.addWidget(self.qmode_hint)
 
         # ручной выбор: видео и звук отдельно, склейка в FFmpeg
@@ -94,8 +95,8 @@ class DownloadPage(QWidget):
         ml.setContentsMargins(0, 0, 0, 0)
         ml.setHorizontalSpacing(14)
         ml.setVerticalSpacing(6)
-        self.v_lbl = make_label("Качество видео", "Dim")
-        self.a_lbl = make_label("Качество звука", "Dim")
+        self.v_lbl = make_label(tr("dl.video_quality"), "Dim")
+        self.a_lbl = make_label(tr("dl.audio_quality"), "Dim")
         self.vfmt = make_combo()
         self.afmt = make_combo()
         self.manual_note = make_label("", "Dim", wrap=True)
@@ -112,10 +113,10 @@ class DownloadPage(QWidget):
         grid = QGridLayout()
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(6)
-        self.q_lbl = make_label("Качество (максимум)", "Dim")
+        self.q_lbl = make_label(tr("dl.quality_max"), "Dim")
         grid.addWidget(self.q_lbl, 0, 0)
-        grid.addWidget(make_label("Сессия (cookies)", "Dim"), 0, 1)
-        grid.addWidget(make_label("Плейлист целиком", "Dim"), 0, 2)
+        grid.addWidget(make_label(tr("dl.session"), "Dim"), 0, 1)
+        grid.addWidget(make_label(tr("dl.playlist"), "Dim"), 0, 2)
         self.quality = make_combo()
         self.session = make_combo()
         self.playlist = ToggleSwitch(self.ctx.settings.get("playlist"))
@@ -132,8 +133,8 @@ class DownloadPage(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(10)
-        self.start_btn = GradientButton("⬇   Скачать")
-        self.cancel_btn = QPushButton("✕  Отмена")
+        self.start_btn = GradientButton("⬇   " + tr("dl.start"))
+        self.cancel_btn = QPushButton("✕  " + tr("dl.cancel"))
         self.cancel_btn.setObjectName("Danger")
         self.cancel_btn.setMinimumHeight(48)
         self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -149,7 +150,7 @@ class DownloadPage(QWidget):
         pg.setContentsMargins(24, 20, 24, 20)
         pg.setSpacing(12)
         top = QHBoxLayout()
-        self.status = make_label("Готов к загрузке", "CardTitle")
+        self.status = make_label(tr("dl.ready"), "CardTitle")
         self.item_lbl = make_label("", "Dim")
         top.addWidget(self.status, 1)
         top.addWidget(self.item_lbl)
@@ -159,7 +160,7 @@ class DownloadPage(QWidget):
 
         stats = QHBoxLayout()
         self.stat_labels: dict[str, object] = {}
-        for key, caption in (("pct", "Прогресс"), ("speed", "Скорость"), ("eta", "Осталось"), ("size", "Размер")):
+        for key, caption in (("pct", tr("dl.stat_pct")), ("speed", tr("dl.stat_speed")), ("eta", tr("dl.stat_eta")), ("size", tr("dl.stat_size"))):
             col = QVBoxLayout()
             col.setSpacing(0)
             col.addWidget(make_label(caption, "Dim"))
@@ -170,10 +171,10 @@ class DownloadPage(QWidget):
         pg.addLayout(stats)
 
         foot = QHBoxLayout()
-        self.log_btn = QPushButton("Журнал  ▾")
+        self.log_btn = QPushButton(tr("dl.log") + "  ▾")
         self.log_btn.setObjectName("Small")
         self.log_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.open_btn = QPushButton("📂  Показать файл")
+        self.open_btn = QPushButton("📂  " + tr("dl.show_file"))
         self.open_btn.setObjectName("Small")
         self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_btn.hide()
@@ -195,8 +196,8 @@ class DownloadPage(QWidget):
         ql.setContentsMargins(24, 18, 24, 18)
         ql.setSpacing(10)
         qh = QHBoxLayout()
-        self.queue_title = make_label("В очереди", "CardTitle")
-        self.clear_queue_btn = QPushButton("Очистить очередь")
+        self.queue_title = make_label(tr("dl.queue", n=0), "CardTitle")
+        self.clear_queue_btn = QPushButton(tr("dl.clear_queue"))
         self.clear_queue_btn.setObjectName("Small")
         qh.addWidget(self.queue_title, 1)
         qh.addWidget(self.clear_queue_btn)
@@ -236,12 +237,13 @@ class DownloadPage(QWidget):
     # ------------------------------------------------------------ настройки формата
     def _refresh_labels(self) -> None:
         s = self.ctx.settings
-        self.segment.setItems([f"🎬  Видео {s.get('video_container').upper()}", f"🎵  Аудио {s.get('audio_format').upper()}"])
+        self.segment.setItems(["🎬  " + tr("dl.seg_video", fmt=s.get("video_container").upper()),
+                               "🎵  " + tr("dl.seg_audio", fmt=s.get("audio_format").upper())])
 
     def _fill_quality(self) -> None:
         s = self.ctx.settings
         audio = self.segment.currentIndex() == 1
-        items = AUDIO_QUALITIES if audio else VIDEO_QUALITIES
+        items = audio_qualities() if audio else video_qualities()
         self.quality.blockSignals(True)
         self.quality.clear()
         for text, data in items:
@@ -263,8 +265,8 @@ class DownloadPage(QWidget):
         current = self.session.currentData() or "auto"
         self.session.blockSignals(True)
         self.session.clear()
-        self.session.addItem("Авто — по сайту ссылки", "auto")
-        self.session.addItem("Без cookies", "none")
+        self.session.addItem(tr("dl.session_auto"), "auto")
+        self.session.addItem(tr("dl.session_none"), "none")
         for p in self.ctx.sessions.profiles():
             self.session.addItem(f"{site_label(p['site'])} · {p['name']}", p["id"])
         set_combo_data(self.session, current)
@@ -293,7 +295,7 @@ class DownloadPage(QWidget):
             return
         self.preview.show()
         self.thumb.setPixmap(None)
-        self.pv_title.setText("Получаем информацию…")
+        self.pv_title.setText(tr("dl.fetching"))
         self.pv_meta.setText("")
         self._set_formats(None)
         self._token = self.ctx.info.fetch(url, self.playlist.isChecked(), self.session.currentData() or "auto")
@@ -304,7 +306,7 @@ class DownloadPage(QWidget):
         self.pv_title.setText(info["title"])
         parts = [info["uploader"]] if info["uploader"] else []
         if info["is_playlist"]:
-            parts.append(f"плейлист · {info['count']} видео")
+            parts.append(tr("dl.playlist_meta", n=info["count"]))
         elif info["duration"]:
             parts.append(format_duration(info["duration"]))
         self.pv_meta.setText("  •  ".join(parts))
@@ -333,7 +335,7 @@ class DownloadPage(QWidget):
     def _on_info_failed(self, message: str, token: int) -> None:
         if token != self._token:
             return
-        self.pv_title.setText("Не удалось получить информацию о ссылке")
+        self.pv_title.setText(tr("dl.info_failed"))
         self.pv_meta.setText(message)
 
     # ------------------------------------------------------------ ручной выбор форматов
@@ -344,7 +346,7 @@ class DownloadPage(QWidget):
             self.vfmt.addItem(v["label"], f"{v['id']}|{1 if v['muxed'] else 0}")
         self.afmt.clear()
         if self._formats["audios"]:
-            self.afmt.addItem("Лучший звук (авто)", "")
+            self.afmt.addItem(tr("dl.audio_opt_auto"), "")
             for a in self._formats["audios"]:
                 self.afmt.addItem(a["label"], a["id"])
         self._update_manual()
@@ -377,17 +379,16 @@ class DownloadPage(QWidget):
             w.setVisible(show_a)
         container = self.ctx.settings.get("video_container").upper()
         if audio_mode:
-            self.manual_note.setText(f"Выбранная дорожка будет скачана и конвертирована в {self.ctx.settings.get('audio_format').upper()} через FFmpeg.")
+            self.manual_note.setText(tr("dl.note_audio", fmt=self.ctx.settings.get("audio_format").upper()))
         elif muxed_only:
-            self.manual_note.setText("Для этого сайта доступны только готовые форматы — звук уже внутри видео.")
+            self.manual_note.setText(tr("dl.note_muxed"))
         else:
-            self.manual_note.setText(f"Видео и звук скачиваются отдельно и склеиваются FFmpeg в один файл {container}. "
-                                     "Если лучшее качество плохое — выберите строкой ниже.")
+            self.manual_note.setText(tr("dl.note_merge", container=container))
 
     def _manual_selection(self, audio_mode: bool) -> tuple[str, str]:
         """(спецификация формата для yt-dlp, подпись для истории)."""
         aud_id = self.afmt.currentData() or ""
-        aud_text = (self.afmt.currentText().split(" · ")[0] if aud_id else "звук авто")
+        aud_text = (self.afmt.currentText().split(" · ")[0] if aud_id else tr("dl.audio_auto"))
         if audio_mode:
             return (aud_id or "ba"), aud_text
         vid_id, muxed = (self.vfmt.currentData() or "|0").split("|")
@@ -397,7 +398,7 @@ class DownloadPage(QWidget):
             return vid_id, f"{container} · {v_text}"
         if self._show_audio_pick and aud_id:
             return f"{vid_id}+{aud_id}", f"{container} · {v_text} + {aud_text}"
-        return f"{vid_id}+ba/{vid_id}", f"{container} · {v_text} + звук авто"
+        return f"{vid_id}+ba/{vid_id}", f"{container} · {v_text} + {tr('dl.audio_auto')}"
 
     # ------------------------------------------------------------ запуск
     def _show_error(self, text: str) -> None:
@@ -407,7 +408,7 @@ class DownloadPage(QWidget):
     def _start(self) -> None:
         url = self.url.text().strip()
         if not looks_like_url(url):
-            self._show_error("Вставьте корректную ссылку, начинающуюся с http:// или https://")
+            self._show_error(tr("dl.bad_url"))
             return
         audio_mode = self.segment.currentIndex() == 1
         quality, label = self.quality.currentData() or "best", ""
@@ -417,7 +418,7 @@ class DownloadPage(QWidget):
         job = Job(url=url, mode="audio" if audio_mode else "video", quality=quality, label=label,
                   playlist=self.playlist.isChecked(), session=self.session.currentData() or "auto")
         if self.ctx.downloads.is_busy():
-            self.status.setText("Добавлено в очередь")
+            self.status.setText(tr("dl.queued"))
         self.ctx.downloads.enqueue(job)
         self.ctx.info.cancel()
         self.url.clear()
@@ -427,7 +428,7 @@ class DownloadPage(QWidget):
     def _toggle_log(self) -> None:
         show = not self.log.isVisible()
         self.log.setVisible(show)
-        self.log_btn.setText("Журнал  ▴" if show else "Журнал  ▾")
+        self.log_btn.setText(tr("dl.log") + ("  ▴" if show else "  ▾"))
 
     def _open_result(self) -> None:
         if self._last_path:
@@ -440,7 +441,7 @@ class DownloadPage(QWidget):
         self.log.clear()
         self.bar.reset()
         self.bar.setIndeterminate(True)
-        self.status.setText("Запуск…")
+        self.status.setText(tr("dl.starting"))
         self.item_lbl.setText("")
         self.open_btn.hide()
         self.cancel_btn.show()
@@ -449,7 +450,7 @@ class DownloadPage(QWidget):
 
     def _on_progress(self, parser) -> None:
         self.status.setText(parser.status)
-        self.item_lbl.setText(f"Элемент {parser.item} из {parser.item_count}" if parser.item_count > 1 else "")
+        self.item_lbl.setText(tr("dl.item_of", i=parser.item, n=parser.item_count) if parser.item_count > 1 else "")
         if parser.percent is None or parser.indeterminate:
             self.bar.setIndeterminate(True)
         else:
@@ -465,18 +466,18 @@ class DownloadPage(QWidget):
         self.cancel_btn.hide()
         if ok:
             self.bar.setValue(100)
-            self.status.setText("Готово ✓")
+            self.status.setText(tr("dl.done"))
             self.stat_labels["pct"].setText("100%")
             self._last_path = paths[0] if paths else ""
             self.open_btn.show()
         else:
             self.bar.reset()
-            self.status.setText(f"Ошибка: {message}" if message != "Загрузка отменена" else message)
+            self.status.setText(tr("dl.error", msg=message) if message != tr("dl.cancelled") else message)
 
     def _refresh_queue(self) -> None:
         queue = self.ctx.downloads.queue
         self.queue_card.setVisible(bool(queue))
-        self.queue_title.setText(f"В очереди: {len(queue)}")
+        self.queue_title.setText(tr("dl.queue", n=len(queue)))
         self.queue_list.clear()
         for job in queue:
             self.queue_list.addItem(("🎵  " if job.mode == "audio" else "🎬  ") + job.url)

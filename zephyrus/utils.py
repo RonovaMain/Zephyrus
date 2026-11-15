@@ -7,6 +7,8 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
+from .i18n import tr
+
 _URL_RE = re.compile(r"^https?://\S+$", re.IGNORECASE)
 
 
@@ -24,17 +26,17 @@ def host_of(url: str) -> str:
 def human_size(num: float | None) -> str:
     if num is None or num < 0:
         return "—"
-    units = ("Б", "КБ", "МБ", "ГБ", "ТБ")
+    units = ("unit.b", "unit.kb", "unit.mb", "unit.gb", "unit.tb")
     value = float(num)
-    for unit in units:
-        if value < 1024 or unit == units[-1]:
-            return f"{value:.0f} {unit}" if unit == "Б" else f"{value:.1f} {unit}"
+    for i, key in enumerate(units):
+        if value < 1024 or i == len(units) - 1:
+            return f"{value:.0f} {tr(key)}" if i == 0 else f"{value:.1f} {tr(key)}"
         value /= 1024
     return "—"
 
 
 def human_speed(bytes_per_sec: float | None) -> str:
-    return "—" if not bytes_per_sec else human_size(bytes_per_sec) + "/с"
+    return "—" if not bytes_per_sec else human_size(bytes_per_sec) + tr("unit.per_s")
 
 
 def format_eta(seconds: float | None) -> str:

@@ -18,3 +18,4 @@ class AppContext:
     sessions: SessionManager
     downloads: DownloadManager
     info: InfoFetcher
+    restart_requested: bool = False   # выставляется при смене языка: main.py перезапустит программу после закрытия окна

@@ -9,17 +9,19 @@ from logging.handlers import RotatingFileHandler
 
 # QtWebEngine нужно импортировать ДО создания QApplication
 from PyQt6 import QtWebEngineWidgets  # noqa: F401
-from PyQt6.QtCore import QCoreApplication, Qt, QLockFile
+from PyQt6.QtCore import QCoreApplication, QLibraryInfo, QLocale, QLockFile, QProcess, Qt, QTranslator
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
-from zephyrus import paths
+from zephyrus import i18n, paths
+from zephyrus.autoupdate import AutoUpdater
 from zephyrus.branding import logo_icon, logo_pixmap
 from zephyrus.context import AppContext
 from zephyrus.crypto import Vault, VaultError
 from zephyrus.database import Database
 from zephyrus.downloader import DownloadManager, InfoFetcher
 from zephyrus.engine import EngineManager
+from zephyrus.i18n import tr
 from zephyrus.sessions import SessionManager
 from zephyrus.settings import Settings
 from zephyrus.theme import theme
@@ -52,6 +54,38 @@ def acquire_single_instance():
     return lock if lock.tryLock(100) else None
 
 
+def system_languages() -> list[str]:
+    return list(QLocale.system().uiLanguages())
+
+
+_qt_translators: list[QTranslator] = []
+
+
+def install_qt_translations(app: QApplication, code: str) -> None:
+    """Стандартные окна Qt (Yes/No, выбор цвета и файла) — на выбранном языке. Нет перевода — останется английский."""
+    for t in _qt_translators:
+        app.removeTranslator(t)
+    _qt_translators.clear()
+    path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    for name in ("qtbase",):
+        t = QTranslator(app)
+        if t.load(QLocale(code), name, "_", path):
+            app.installTranslator(t)
+            _qt_translators.append(t)
+
+
+def release_single_instance(instance) -> None:
+    """Освободить блокировку «одна копия» — нужно перед перезапуском (смена языка)."""
+    if instance is None:
+        return
+    if paths.IS_WINDOWS:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        k32.CloseHandle(instance)
+    else:
+        instance.unlock()
+
+
 def main() -> int:
     paths.ensure_dirs()
     setup_logging()
@@ -67,9 +101,12 @@ def main() -> int:
     app.setApplicationVersion(paths.APP_VERSION)
     app.setWindowIcon(logo_icon())
 
+    # язык до чтения настроек — по системе; точный выбор пользователя применится чуть ниже
+    install_qt_translations(app, i18n.set_language(i18n.match_language(system_languages())))
+
     instance = acquire_single_instance()
     if instance is None:
-        QMessageBox.information(None, paths.APP_NAME, "Zephyrus уже запущен.")
+        QMessageBox.information(None, paths.APP_NAME, tr("app.running"))
         return 0
 
     splash = QSplashScreen(logo_pixmap(180, app.devicePixelRatio()))
@@ -82,15 +119,19 @@ def main() -> int:
     for stale in paths.CACHE_DIR.glob("rec_*.txt"):
         stale.unlink(missing_ok=True)
 
+    db = Database(paths.DB_PATH)
+    settings = Settings(db)
+    lang = i18n.set_language(i18n.resolve_language(settings.get("language"), system_languages()))
+    install_qt_translations(app, lang)
+
     try:
         vault = Vault(paths.KEY_PATH)
     except VaultError as exc:
         splash.close()
         QMessageBox.critical(None, paths.APP_NAME, str(exc))
+        db.close()
         return 1
 
-    db = Database(paths.DB_PATH)
-    settings = Settings(db)
     theme.configure(settings.get("theme_mode"), settings.get("accent"), settings.get("accent_custom"))
     theme.apply(app)
 
@@ -106,13 +147,17 @@ def main() -> int:
     window.show()
     splash.finish(window)
 
-    if not engine.is_ready():
-        QMessageBox.warning(window, paths.APP_NAME,
-                            "Не найден yt-dlp. Положите yt-dlp.exe и ffmpeg.exe в папку bin проекта "
-                            "(python tools/fetch_binaries.py) либо нажмите «Обновить движок» в настройках.")
+    # автообновление yt-dlp: при первом запуске и затем примерно раз в 2 дня (пока программа открыта)
+    updater = AutoUpdater(engine, settings, downloads)
+    updater.engineMissing.connect(lambda: QMessageBox.warning(window, paths.APP_NAME, tr("app.no_engine")))
+    updater.start()
 
     code = app.exec()
     db.close()
+    if ctx.restart_requested:   # пользователь сменил язык и согласился на перезапуск
+        release_single_instance(instance)
+        args = sys.argv[1:] if paths.IS_FROZEN else sys.argv
+        QProcess.startDetached(sys.executable, args)
     return code
 
 

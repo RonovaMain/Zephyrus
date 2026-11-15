@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWin
 from ..branding import logo_icon, logo_pixmap
 from ..context import AppContext
 from ..downloader import Job
+from ..i18n import tr
 from ..paths import APP_AUTHOR, APP_NAME, APP_VERSION
 from ..theme import theme
 from .download_page import DownloadPage
@@ -59,7 +60,8 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         ctx.downloads.jobFinished.connect(self._on_job_finished)
         theme.changed.connect(lambda: theme.style_window(self))
-        ctx.engine.versions(lambda yt, _ff: self.engine_lbl.setText(f"yt-dlp {yt}"))
+        self._refresh_engine_label()
+        ctx.engine.updateFinished.connect(lambda ok, _msg: ok and self._refresh_engine_label())
 
     # ------------------------------------------------------------ боковое меню
     def _build_sidebar(self) -> QFrame:
@@ -90,7 +92,7 @@ class MainWindow(QMainWindow):
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.nav: list[NavButton] = []
-        for i, (emoji, text) in enumerate((("📥", "Загрузка"), ("🔑", "Сессии"), ("📜", "История"), ("⚙️", "Настройки"))):
+        for i, (emoji, text) in enumerate((("📥", tr("nav.download")), ("🔑", tr("nav.sessions")), ("📜", tr("nav.history")), ("⚙️", tr("nav.settings")))):
             b = NavButton(emoji, text)
             self.group.addButton(b, i)
             b.clicked.connect(lambda _=False, idx=i: self.stack.setCurrentIndex(idx))
@@ -103,6 +105,9 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.engine_lbl)
         lay.addWidget(make_label(f"v{APP_VERSION}  ·  {APP_AUTHOR}", "Dim"))
         return bar
+
+    def _refresh_engine_label(self) -> None:
+        self.ctx.engine.versions(lambda yt, _ff: self.engine_lbl.setText(f"yt-dlp {yt}"))
 
     def _go(self, idx: int) -> None:
         self.nav[idx].setChecked(True)
@@ -117,13 +122,13 @@ class MainWindow(QMainWindow):
             self.tray.show()
 
     def _on_job_finished(self, job: Job, ok: bool, message: str, paths: list) -> None:
-        if not self.ctx.settings.get("notifications") or self.tray is None or message == "Загрузка отменена":
+        if not self.ctx.settings.get("notifications") or self.tray is None or message == tr("dl.cancelled"):
             return
         if ok:
             name = paths[0].replace("\\", "/").rsplit("/", 1)[-1] if paths else job.url
-            self.tray.showMessage("Загрузка завершена", name, QSystemTrayIcon.MessageIcon.Information, 5000)
+            self.tray.showMessage(tr("tray.done"), name, QSystemTrayIcon.MessageIcon.Information, 5000)
         else:
-            self.tray.showMessage("Ошибка загрузки", message, QSystemTrayIcon.MessageIcon.Warning, 7000)
+            self.tray.showMessage(tr("tray.error"), message, QSystemTrayIcon.MessageIcon.Warning, 7000)
 
     # ------------------------------------------------------------ окно
     def showEvent(self, e) -> None:  # noqa: N802
@@ -132,8 +137,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, e) -> None:  # noqa: N802
         if self.ctx.downloads.is_busy():
-            answer = QMessageBox.question(self, APP_NAME, "Идёт загрузка. Закрыть программу и прервать её?")
+            answer = QMessageBox.question(self, APP_NAME, tr("app.close_busy"))
             if answer != QMessageBox.StandardButton.Yes:
+                self.ctx.restart_requested = False   # отменили закрытие — перезапуск (смена языка) тоже отменяется
                 e.ignore()
                 return
             self.ctx.downloads.cancel_current()

@@ -9,6 +9,7 @@ from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLineEdit, QMessageBox, QPushButton, QToolButton, QVBoxLayout
 
+from ..i18n import tr
 from ..theme import theme
 from .widgets import GradientButton, make_label
 
@@ -28,7 +29,7 @@ def _cookie_to_dict(c: QNetworkCookie) -> dict:
 class LoginDialog(QDialog):
     def __init__(self, site_name: str, url: str, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Вход — {site_name}")
+        self.setWindowTitle(tr("login.title", site=site_name))
         self.resize(1040, 740)
         self._cookies: dict[tuple[str, str, str], dict] = {}
 
@@ -69,11 +70,11 @@ class LoginDialog(QDialog):
 
         foot = QHBoxLayout()
         foot.setSpacing(10)
-        self.hint = make_label("Войдите в аккаунт, затем нажмите «Сохранить сессию».", "Dim", wrap=True)
-        self.count = make_label("Cookies: 0", "Pill")
-        cancel = QPushButton("Отмена")
+        self.hint = make_label(tr("login.hint"), "Dim", wrap=True)
+        self.count = make_label(tr("login.cookies", n=0), "Pill")
+        cancel = QPushButton(tr("login.cancel"))
         cancel.setMinimumHeight(46)
-        self.save_btn = GradientButton("✅  Сохранить сессию")
+        self.save_btn = GradientButton("✅  " + tr("login.save"))
         self.save_btn.setMinimumWidth(240)
         foot.addWidget(self.hint, 1)
         foot.addWidget(self.count)
@@ -97,19 +98,19 @@ class LoginDialog(QDialog):
     def _on_added(self, cookie: QNetworkCookie) -> None:
         d = _cookie_to_dict(cookie)
         self._cookies[(d["domain"], d["path"], d["name"])] = d
-        self.count.setText(f"Cookies: {len(self._cookies)}")
+        self.count.setText(tr("login.cookies", n=len(self._cookies)))
 
     def _on_removed(self, cookie: QNetworkCookie) -> None:
         d = _cookie_to_dict(cookie)
         self._cookies.pop((d["domain"], d["path"], d["name"]), None)
-        self.count.setText(f"Cookies: {len(self._cookies)}")
+        self.count.setText(tr("login.cookies", n=len(self._cookies)))
 
     def cookies(self) -> list[dict]:
         return list(self._cookies.values())
 
     def _save(self) -> None:
         if not self._cookies:
-            QMessageBox.information(self, "Zephyrus", "Пока не получено ни одной cookie. Сначала войдите в аккаунт на сайте.")
+            QMessageBox.information(self, "Zephyrus", tr("login.empty"))
             return
         self.accept()
 

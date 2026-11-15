@@ -10,6 +10,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from .crypto import Vault
 from .database import Database
+from .i18n import tr
 from .paths import PROFILES_DIR
 from .utils import base_domain, host_of
 
@@ -174,7 +175,7 @@ class SessionManager(QObject):
         text = Path(file_path).read_text(encoding="utf-8", errors="replace")
         cookies = parse_netscape(text)
         if not cookies:
-            raise ValueError("В файле не найдено ни одной cookie в формате Netscape")
+            raise ValueError(tr("ses.err_no_cookies"))
         return self.add_profile(site, name, cookies)
 
     def export_temp_cookiefile(self, pid: str, target: Path) -> Path:

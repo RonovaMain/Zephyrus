@@ -5,6 +5,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 
+from .i18n import tr
+
 REC_SEP = "::ZSEP::"
 
 PROGRESS_TEMPLATE = (
@@ -26,17 +28,17 @@ EXTRACT_RE = re.compile(r"^\[ExtractAudio\] Destination: (.+)$")
 ALREADY_RE = re.compile(r"^\[download\] (.+) has already been downloaded")
 ERROR_RE = re.compile(r"^ERROR: (.+)$")
 
-PP_NAMES_RU = {
-    "Merger": "Объединение видео и аудио",
-    "ExtractAudio": "Конвертация в аудио",
-    "VideoConvertor": "Конвертация видео",
-    "EmbedThumbnail": "Встраивание обложки",
-    "Metadata": "Запись метаданных",
-    "FFmpegMetadata": "Запись метаданных",
-    "EmbedSubtitle": "Встраивание субтитров",
-    "ModifyChapters": "Вырезание сегментов SponsorBlock",
-    "SponsorBlock": "Запрос SponsorBlock",
-    "MoveFiles": "Перемещение файла",
+PP_KEYS = {
+    "Merger": "pp.Merger",
+    "ExtractAudio": "pp.ExtractAudio",
+    "VideoConvertor": "pp.VideoConvertor",
+    "EmbedThumbnail": "pp.EmbedThumbnail",
+    "Metadata": "pp.Metadata",
+    "FFmpegMetadata": "pp.Metadata",
+    "EmbedSubtitle": "pp.EmbedSubtitle",
+    "ModifyChapters": "pp.ModifyChapters",
+    "SponsorBlock": "pp.SponsorBlock",
+    "MoveFiles": "pp.MoveFiles",
 }
 
 
@@ -55,7 +57,7 @@ class ProgressParser:
     speed: float | None = None
     eta: float | None = None
     size: float | None = None
-    status: str = "Подготовка…"
+    status: str = ""
     item: int = 1
     item_count: int = 1
     streams_done: int = 0
@@ -64,6 +66,9 @@ class ProgressParser:
     last_destination: str = ""
     indeterminate: bool = False
     log_lines: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.status = tr("pp.preparing")
 
     def feed(self, line: str) -> bool:
         """Вернуть True, если строку надо показать в журнале."""
@@ -80,7 +85,8 @@ class ProgressParser:
         if m:
             if m["status"] == "started":
                 self.indeterminate = True
-                self.status = PP_NAMES_RU.get(m["name"], f"Обработка: {m['name']}")
+                key = PP_KEYS.get(m["name"])
+                self.status = tr(key) if key else tr("pp.generic", name=m["name"])
                 self.speed = self.eta = None
             return False
 
@@ -98,7 +104,7 @@ class ProgressParser:
         m = ALREADY_RE.match(line)
         if m:
             self.last_destination = m[1]
-            self.status = "Файл уже скачан"
+            self.status = tr("pp.exists")
         m = ERROR_RE.match(line)
         if m:
             self.last_error = m[1]
@@ -124,11 +130,11 @@ class ProgressParser:
         if self.expected_streams is None:
             self.expected_streams = 1 if (self.mode == "audio" or (has_v and has_a)) else 2
         if self.mode == "audio" or (has_a and not has_v):
-            self.status = "Загрузка аудио"
+            self.status = tr("pp.dl_audio")
         elif has_v and not has_a:
-            self.status = "Загрузка видео"
+            self.status = tr("pp.dl_video")
         else:
-            self.status = "Загрузка"
+            self.status = tr("pp.dl")
         finished = m["status"] == "finished"
         if finished:
             frac = 1.0
@@ -146,19 +152,23 @@ class ProgressParser:
 
 
 # ------------------------------------------------------------------ аргументы
-VIDEO_QUALITIES = [("Лучшее доступное", "best"), ("4K · 2160p", "2160"), ("2K · 1440p", "1440"),
-                   ("Full HD · 1080p", "1080"), ("HD · 720p", "720"), ("480p", "480"), ("360p", "360")]
-AUDIO_QUALITIES = [("Лучшее (VBR)", "0"), ("320 кбит/с", "320"), ("256 кбит/с", "256"),
-                   ("192 кбит/с", "192"), ("128 кбит/с", "128")]
+def video_qualities() -> list[tuple[str, str]]:
+    return [(tr("q.best_avail"), "best"), ("4K · 2160p", "2160"), ("2K · 1440p", "1440"),
+            ("Full HD · 1080p", "1080"), ("HD · 720p", "720"), ("480p", "480"), ("360p", "360")]
+
+
+def audio_qualities() -> list[tuple[str, str]]:
+    kbps = tr("unit.kbps")
+    return [(tr("q.best_vbr"), "0")] + [(f"{q} {kbps}", q) for q in ("320", "256", "192", "128")]
 
 
 def quality_label(mode: str, quality: str, container: str, audio_fmt: str) -> str:
     if quality.startswith("fmt:"):
-        return (audio_fmt.upper() if mode == "audio" else container.upper()) + " · ручной выбор"
+        return (audio_fmt.upper() if mode == "audio" else container.upper()) + " · " + tr("q.manual")
     if mode == "audio":
-        q = "лучшее" if quality == "0" else f"{quality} кбит/с"
+        q = tr("q.best") if quality == "0" else f"{quality} {tr('unit.kbps')}"
         return f"{audio_fmt.upper()} · {q}"
-    q = "лучшее" if quality == "best" else f"{quality}p"
+    q = tr("q.best") if quality == "best" else f"{quality}p"
     return f"{container.upper()} · {q}"
 
 
@@ -272,7 +282,7 @@ def _size_text(f: dict) -> str:
     if not n:
         return ""
     mb = n / 1024 / 1024
-    return f"~{mb / 1024:.1f} ГБ" if mb >= 1024 else f"~{mb:.0f} МБ"
+    return f"~{mb / 1024:.1f} {tr('unit.gb')}" if mb >= 1024 else f"~{mb:.0f} {tr('unit.mb')}"
 
 
 def summarize_formats(formats: list[dict]) -> dict:
@@ -306,7 +316,7 @@ def summarize_formats(formats: list[dict]) -> dict:
         elif _has(ac) and not _has(vc):
             abr = float(f.get("abr") or f.get("tbr") or 0)
             lang = f.get("language") or ""
-            label = f"{abr:.0f} кбит/с · {codec_name(ac)} · {f.get('ext', '')}" if abr else f"{codec_name(ac)} · {f.get('ext', '')}"
+            label = f"{abr:.0f} {tr('unit.kbps')} · {codec_name(ac)} · {f.get('ext', '')}" if abr else f"{codec_name(ac)} · {f.get('ext', '')}"
             if lang:
                 label += f" · {lang}"
             size = _size_text(f)

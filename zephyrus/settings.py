@@ -41,6 +41,9 @@ class Settings(QObject):
             "fragments": 4,
             "proxy": "",
             "notifications": True,
+            "language": "auto",             # auto | ru | uk | be | en
+            "engine_auto_update": True,     # проверка yt-dlp в фоне: при первом запуске и раз в ~2 дня
+            "engine_last_check": 0,         # unix-время последней успешной проверки
         }
 
     def get(self, key: str) -> Any:
@@ -67,6 +70,13 @@ class Settings(QObject):
         self._db.set_setting(key, raw)
         self.changed.emit(key)
 
+    # эти ключи не сбрасываются кнопкой «Сбросить настройки»
+    KEEP_ON_RESET = ("language", "engine_last_check")
+
     def reset(self) -> None:
+        keep = {k: self._db.get_setting(k) for k in self.KEEP_ON_RESET}
         self._db.clear_settings()
+        for key, value in keep.items():
+            if value is not None:
+                self._db.set_setting(key, value)
         self.changed.emit("*")

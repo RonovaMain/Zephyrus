@@ -14,7 +14,8 @@ from PyQt6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, pyqtSig
 
 from .database import Database
 from .engine import EngineManager
-from .paths import CACHE_DIR, IS_WINDOWS
+from .i18n import tr
+from .paths import BIN_DIR, CACHE_DIR, IS_WINDOWS
 from .sessions import SessionManager
 from .settings import Settings
 from .ytdlp_args import (REC_SEP, BuildOptions, ProgressParser, build_download_args, build_info_args,
@@ -165,7 +166,7 @@ class DownloadManager(QObject):
         job = self._queue.pop(0)
         self.queueChanged.emit()
         if not self._engine.is_ready():
-            self.jobFinished.emit(job, False, "yt-dlp не найден. Положите yt-dlp.exe в папку bin или нажмите «Обновить движок».", [])
+            self.jobFinished.emit(job, False, tr("dl.no_engine"), [])
             QTimer.singleShot(0, self._start_next)
             return
 
@@ -174,7 +175,7 @@ class DownloadManager(QObject):
         try:
             os.makedirs(outdir, exist_ok=True)
         except OSError as exc:
-            self.jobFinished.emit(job, False, f"Не удалось создать папку загрузки: {exc}", [])
+            self.jobFinished.emit(job, False, tr("dl.err_folder", err=exc), [])
             QTimer.singleShot(0, self._start_next)
             return
 
@@ -230,7 +231,7 @@ class DownloadManager(QObject):
 
     def _on_error(self, err: QProcess.ProcessError) -> None:
         if err == QProcess.ProcessError.FailedToStart and self._proc is not None:
-            self._finish(False, "Не удалось запустить yt-dlp (проверьте файл в LOCALAPPDATA\\Zephyrus\\bin)", [])
+            self._finish(False, tr("dl.err_start", path=BIN_DIR), [])
 
     def _on_finished(self, code: int, _status: QProcess.ExitStatus) -> None:
         if self._proc is None:
@@ -241,15 +242,15 @@ class DownloadManager(QObject):
         parser = self._parser
         records = self._read_records()
         if self._cancelled:
-            return self._finish(False, "Загрузка отменена", [])
+            return self._finish(False, tr("dl.cancelled"), [])
         if code != 0 and not records:
-            msg = (parser.last_error if parser else "") or f"yt-dlp завершился с кодом {code}"
+            msg = (parser.last_error if parser else "") or tr("dl.err_exit", code=code)
             return self._finish(False, msg, [])
         if not records and parser and parser.last_destination:
             records = [(Path(parser.last_destination).stem, parser.last_destination)]
         if not records:
-            return self._finish(False, "yt-dlp не сообщил путь к файлу", [])
-        self._finish(True, "Готово", records)
+            return self._finish(False, tr("dl.err_nopath"), [])
+        self._finish(True, tr("dl.finished_ok"), records)
 
     def _read_records(self) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
@@ -319,7 +320,7 @@ class InfoFetcher(QObject):
     def fetch(self, url: str, playlist: bool, session: str) -> int:
         self.cancel()
         if not self._engine.is_ready():
-            self.failed.emit("Движок не найден", self._token)
+            self.failed.emit(tr("info.no_engine"), self._token)
             return self._token
         token = self._token
         cookie = _prepare_cookie_file(self._sessions, url, session, f"info_{token}")
@@ -341,7 +342,7 @@ class InfoFetcher(QObject):
         self._proc = None
         proc.deleteLater()
         self._drop_cookies()
-        self.failed.emit("Не удалось запустить yt-dlp", token)
+        self.failed.emit(tr("info.err_start"), token)
 
     def _drop_cookies(self) -> None:
         if self._cookie_tmp:
@@ -354,7 +355,7 @@ class InfoFetcher(QObject):
     def _on_timeout(self) -> None:
         token = self._token
         self.cancel()
-        self.failed.emit("Превышено время ожидания", token)
+        self.failed.emit(tr("info.timeout"), token)
 
     def _on_finished(self, proc: QProcess, token: int) -> None:
         if proc is not self._proc or token != self._token:
@@ -371,7 +372,7 @@ class InfoFetcher(QObject):
         except json.JSONDecodeError:
             data = None
         if not isinstance(data, dict):
-            msg = next((ln[7:] for ln in err.splitlines() if ln.startswith("ERROR: ")), "") or "Не удалось получить информацию"
+            msg = next((ln[7:] for ln in err.splitlines() if ln.startswith("ERROR: ")), "") or tr("info.err_generic")
             self.failed.emit(msg, token)
             return
         self.ready.emit(self._summarize(data), token)
@@ -390,7 +391,7 @@ class InfoFetcher(QObject):
             first = entries[0] or {}
             thumb = first.get("thumbnail") or ((first.get("thumbnails") or [{}])[-1].get("url", ""))
         return {
-            "title": d.get("title") or d.get("id") or "Без названия",
+            "title": d.get("title") or d.get("id") or tr("info.untitled"),
             "uploader": d.get("uploader") or d.get("channel") or "",
             "duration": d.get("duration"),
             "thumbnail": thumb,

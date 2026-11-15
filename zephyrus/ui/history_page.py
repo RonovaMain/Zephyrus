@@ -11,11 +11,13 @@ from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView, QLineE
 
 from ..context import AppContext
 from ..downloader import Job
+from ..i18n import tr
 from ..theme import theme
 from ..utils import open_folder, reveal_in_folder
 from .widgets import Card, make_label, page_header
 
-COLUMNS = ["Название", "URL", "Дата", "Формат", "Путь к файлу", ""]
+def _columns() -> list[str]:
+    return [tr("hist.col_name"), tr("hist.col_url"), tr("hist.col_date"), tr("hist.col_format"), tr("hist.col_path"), ""]
 
 
 class HistoryPage(QWidget):
@@ -35,16 +37,16 @@ class HistoryPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(36, 30, 36, 30)
         root.setSpacing(18)
-        root.addWidget(page_header("История", "Всё, что вы скачали. Если файл удалён с диска — запись бледнеет, и его можно скачать заново."))
+        root.addWidget(page_header(tr("hist.title"), tr("hist.subtitle")))
 
         bar = QHBoxLayout()
         bar.setSpacing(10)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔍  Поиск по названию, ссылке или пути")
+        self.search.setPlaceholderText("🔍  " + tr("hist.search"))
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda *_: self.reload())
         self.stats = make_label("", "Dim")
-        self.clear_btn = QPushButton("🗑  Очистить историю")
+        self.clear_btn = QPushButton("🗑  " + tr("hist.clear"))
         self.clear_btn.setObjectName("Danger")
         self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_btn.clicked.connect(self._clear)
@@ -56,8 +58,9 @@ class HistoryPage(QWidget):
         card = Card()
         cl = QVBoxLayout(card)
         cl.setContentsMargins(14, 10, 14, 14)
-        self.table = QTableWidget(0, len(COLUMNS))
-        self.table.setHorizontalHeaderLabels(COLUMNS)
+        columns = _columns()
+        self.table = QTableWidget(0, len(columns))
+        self.table.setHorizontalHeaderLabels(columns)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(58)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -78,7 +81,7 @@ class HistoryPage(QWidget):
         self.table.setColumnWidth(5, 300)
         self.table.cellDoubleClicked.connect(self._open_row)
         cl.addWidget(self.table)
-        self.empty = make_label("История пуста — скачайте что-нибудь, и оно появится здесь.", "Dim")
+        self.empty = make_label(tr("hist.empty"), "Dim")
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cl.addWidget(self.empty)
         root.addWidget(card, 1)
@@ -122,7 +125,7 @@ class HistoryPage(QWidget):
             self.table.setCellWidget(r, 5, self._actions(row, exists))
         self.empty.setVisible(not rows)
         self.table.setVisible(bool(rows))
-        self.stats.setText(f"Записей: {len(rows)}" + (f" · файл удалён: {missing}" if missing else ""))
+        self.stats.setText(tr("hist.stats_missing", n=len(rows), missing=missing) if missing else tr("hist.stats", n=len(rows)))
         self.clear_btn.setEnabled(bool(self.ctx.db.list_history()))
 
     def _actions(self, row, exists: bool) -> QWidget:
@@ -130,11 +133,11 @@ class HistoryPage(QWidget):
         lay = QHBoxLayout(box)
         lay.setContentsMargins(4, 0, 4, 0)
         lay.setSpacing(8)
-        show = QPushButton("📂 Показать")
+        show = QPushButton("📂 " + tr("hist.show"))
         show.setObjectName("Small")
         show.setEnabled(exists)
         show.clicked.connect(lambda _=False, p=row["path"]: reveal_in_folder(p))
-        redo = QPushButton("↻ Скачать повторно")
+        redo = QPushButton("↻ " + tr("hist.redo"))
         redo.setObjectName("Small")
         redo.setEnabled(not exists)
         redo.clicked.connect(lambda _=False, rid=row["id"]: self._redownload(rid))
@@ -168,7 +171,7 @@ class HistoryPage(QWidget):
         self.navigateToDownloads.emit()
 
     def _clear(self) -> None:
-        if QMessageBox.question(self, "Очистить историю", "Удалить все записи истории?\nСами файлы на диске останутся.") \
+        if QMessageBox.question(self, tr("hist.clear_title"), tr("hist.clear_text")) \
                 == QMessageBox.StandardButton.Yes:
             self.ctx.db.clear_history()
             self.reload()

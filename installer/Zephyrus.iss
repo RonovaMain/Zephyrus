@@ -7,7 +7,7 @@
 #define MyAppName      "Zephyrus"
 ; Версию можно передать из командной строки: ISCC /DMyAppVersion=1.2.3 Zephyrus.iss
 #ifndef MyAppVersion
-#define MyAppVersion   "1.0.0"
+#define MyAppVersion   "1.3.6"
 #endif
 #define MyAppPublisher "RonovaDev"
 #define MyAppExeName   "Zephyrus.exe"
@@ -28,7 +28,7 @@ AppUpdatesURL={#MyAppURL}
 #endif
 VersionInfoVersion={#MyAppVersion}
 
-; Установка в Program Files; страница выбора папки включена, поэтому можно выбрать любой диск
+; Установка в Program Files по умолчанию; страница выбора папки включена — пользователь сам указывает любой путь и диск
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableDirPage=no
@@ -70,66 +70,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-{ ---------- Страница выбора диска установки (C:, D:, ...) ---------- }
-var
-  DrivePage: TInputOptionWizardPage;
-  DriveLetters: array of String;
-
-function DriveExists(const Letter: String): Boolean;
-begin
-  Result := DirExists(Letter + ':\');
-end;
-
-procedure InitializeWizard;
-var
-  i, idx: Integer;
-  L: String;
-  ProgramDrive: String;
-begin
-  DrivePage := CreateInputOptionPage(wpWelcome,
-    'Диск установки',
-    'На какой диск установить Zephyrus?',
-    'Выберите диск. Данные программы (база, сессии, обновления движка) в любом случае хранятся в профиле пользователя: %LOCALAPPDATA%\Zephyrus.',
-    True, False);
-
-  ProgramDrive := Copy(ExpandConstant('{autopf}'), 1, 1);
-  SetArrayLength(DriveLetters, 0);
-  for i := 0 to 23 do
-  begin
-    L := Chr(Ord('C') + i);
-    if DriveExists(L) then
-    begin
-      idx := GetArrayLength(DriveLetters);
-      SetArrayLength(DriveLetters, idx + 1);
-      DriveLetters[idx] := L;
-      DrivePage.Add('Диск ' + L + ':');
-      if CompareText(L, ProgramDrive) = 0 then
-        DrivePage.Values[idx] := True;
-    end;
-  end;
-  if (GetArrayLength(DriveLetters) > 0) and (DrivePage.SelectedValueIndex < 0) then
-    DrivePage.Values[0] := True;
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-var
-  Letter, ProgramDrive: String;
-begin
-  Result := True;
-  if CurPageID = DrivePage.ID then
-  begin
-    if DrivePage.SelectedValueIndex >= 0 then
-    begin
-      Letter := DriveLetters[DrivePage.SelectedValueIndex];
-      ProgramDrive := Copy(ExpandConstant('{autopf}'), 1, 1);
-      if CompareText(Letter, ProgramDrive) = 0 then
-        WizardForm.DirEdit.Text := ExpandConstant('{autopf}\{#MyAppName}')
-      else
-        WizardForm.DirEdit.Text := Letter + ':\{#MyAppName}';
-    end;
-  end;
-end;
-
 { ---------- Удаление: спросить про пользовательские данные ---------- }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var

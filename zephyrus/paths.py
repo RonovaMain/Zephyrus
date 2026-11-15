@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "Zephyrus"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.3.6"
 APP_AUTHOR = "RonovaDev"
 # Впишите сюда ссылку на ваш репозиторий, например "https://github.com/RonovaDev/Zephyrus".
 # Пока строка пустая, кнопка GitHub в «О программе» неактивна.

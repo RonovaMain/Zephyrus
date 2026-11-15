@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QAbstractButton, QFileDialog, QFrame, QGridLayout, 
 
 from ..context import AppContext
 from ..favicons import get_favicons
+from ..i18n import tr
 from ..sessions import SITE_BY_KEY, SITES, SessionManager, Site, site_icon_domain, site_label
 from ..theme import qcolor, theme
 from ..utils import host_of
@@ -121,10 +122,7 @@ class SessionsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(36, 30, 36, 30)
         root.setSpacing(18)
-        root.addWidget(page_header(
-            "Сессии",
-            "Войдите в аккаунт на сайте — Zephyrus сохранит cookies в зашифрованный профиль и подставит их в yt-dlp "
-            "автоматически (для закрытых, возрастных и платных видео)."))
+        root.addWidget(page_header(tr("ses.title"), tr("ses.subtitle")))
 
         self.grid_host = QWidget()
         self.grid = QGridLayout(self.grid_host)
@@ -135,8 +133,8 @@ class SessionsPage(QWidget):
             tile = SiteTile(site.name, site.icon_domain, site.letter, site.color)
             tile.clicked.connect(lambda _=False, s=site: self._login(s.key, s.name, s.login_url))
             self._tiles.append((tile, site.key))
-        custom = SiteTile("Другой сайт", "", "＋", theme.palette.accent)
-        custom.set_status("любой адрес", False)
+        custom = SiteTile(tr("ses.other"), "", "＋", theme.palette.accent)
+        custom.set_status(tr("ses.any_address"), False)
         custom.clicked.connect(self._login_custom)
         self._tiles.append((custom, "__custom__"))
         root.addWidget(self.grid_host)
@@ -146,8 +144,8 @@ class SessionsPage(QWidget):
         cl.setContentsMargins(24, 20, 24, 20)
         cl.setSpacing(12)
         head = QHBoxLayout()
-        head.addWidget(make_label("Мои профили", "CardTitle"), 1)
-        imp = QPushButton("📄  Импорт cookies.txt")
+        head.addWidget(make_label(tr("ses.my_profiles"), "CardTitle"), 1)
+        imp = QPushButton("📄  " + tr("ses.import"))
         imp.setObjectName("Small")
         imp.setCursor(Qt.CursorShape.PointingHandCursor)
         imp.clicked.connect(self._import)
@@ -156,11 +154,9 @@ class SessionsPage(QWidget):
         self.profiles_box = QVBoxLayout()
         self.profiles_box.setSpacing(8)
         cl.addLayout(self.profiles_box)
-        self.empty = make_label("Профилей пока нет. Нажмите на плитку сайта, чтобы войти в аккаунт.", "Dim", wrap=True)
+        self.empty = make_label(tr("ses.none"), "Dim", wrap=True)
         cl.addWidget(self.empty)
-        self.note = make_label(
-            "Профили шифруются ключом, привязанным к вашей учётной записи Windows. Если Google/YouTube не пускает "
-            "во встроенном браузере — экспортируйте cookies.txt расширением и используйте «Импорт».", "Dim", wrap=True)
+        self.note = make_label(tr("ses.note"), "Dim", wrap=True)
         cl.addWidget(self.note)
         root.addWidget(card)
         root.addStretch(1)
@@ -187,7 +183,7 @@ class SessionsPage(QWidget):
                 continue
             mine = [p for p in profiles if p["site"] == key]
             active = any(p["active"] for p in mine)
-            tile.set_status(f"профилей: {len(mine)}" if mine else "нет профилей", active)
+            tile.set_status(tr("ses.profiles_n", n=len(mine)) if mine else tr("ses.no_profiles"), active)
         # список профилей
         while self.profiles_box.count():
             item = self.profiles_box.takeAt(0)
@@ -212,24 +208,24 @@ class SessionsPage(QWidget):
             when = datetime.fromisoformat(p["created_at"]).strftime("%d.%m.%Y")
         except ValueError:
             when = ""
-        info.addWidget(make_label(f"{site_label(p['site'])} · cookies: {p['cookie_count']} · {when}", "Dim"))
+        info.addWidget(make_label(tr("ses.line", site=site_label(p["site"]), n=p["cookie_count"], date=when), "Dim"))
         lay.addLayout(info, 1)
         if p["active"]:
-            lay.addWidget(make_label("Активен", "Pill"))
+            lay.addWidget(make_label(tr("ses.active"), "Pill"))
         else:
-            b = QPushButton("Сделать активным")
+            b = QPushButton(tr("ses.make_active"))
             b.setObjectName("Small")
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.clicked.connect(lambda _=False, pid=p["id"]: self.sm.set_active(pid))
             lay.addWidget(b)
         ren = QPushButton("✏")
         ren.setObjectName("Small")
-        ren.setToolTip("Переименовать")
+        ren.setToolTip(tr("ses.rename_tip"))
         ren.clicked.connect(lambda _=False, pid=p["id"], n=p["name"]: self._rename(pid, n))
         dele = QPushButton("🗑")
         dele.setObjectName("Danger")
         dele.setProperty("small", True)
-        dele.setToolTip("Удалить профиль полностью")
+        dele.setToolTip(tr("ses.delete_tip"))
         dele.clicked.connect(lambda _=False, pid=p["id"], n=p["name"]: self._delete(pid, n))
         for b in (ren, dele):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -238,7 +234,7 @@ class SessionsPage(QWidget):
 
     # ---------- действия ----------
     def _next_name(self, site_key: str) -> str:
-        return f"Профиль {len(self.sm.profiles(site_key)) + 1}"
+        return tr("ses.profile_n", n=len(self.sm.profiles(site_key)) + 1)
 
     def _login(self, site_key: str, name: str, url: str, hosts: list[str] | None = None) -> None:
         dlg = LoginDialog(name, url, self.window())
@@ -247,13 +243,13 @@ class SessionsPage(QWidget):
             return
         cookies = dlg.cookies()
         dlg.deleteLater()
-        pname, ok = QInputDialog.getText(self, "Название профиля", "Как назвать этот профиль?", text=self._next_name(site_key))
+        pname, ok = QInputDialog.getText(self, tr("ses.name_title"), tr("ses.name_prompt"), text=self._next_name(site_key))
         if not ok or not pname.strip():
             return
         self.sm.add_profile(site_key, pname.strip(), cookies, hosts)
 
     def _login_custom(self) -> None:
-        url, ok = QInputDialog.getText(self, "Другой сайт", "Адрес страницы входа (https://…):")
+        url, ok = QInputDialog.getText(self, tr("ses.other"), tr("ses.url_prompt"))
         url = url.strip()
         if not ok or not url:
             return
@@ -261,39 +257,40 @@ class SessionsPage(QWidget):
             url = "https://" + url
         key, hosts = SessionManager.custom_site_key(url)
         if not hosts or not hosts[0]:
-            QMessageBox.warning(self, "Zephyrus", "Не удалось определить домен сайта.")
+            QMessageBox.warning(self, "Zephyrus", tr("ses.domain_fail"))
             return
         self._login(key, host_of(url), url, hosts)
 
     def _import(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Выберите cookies.txt", "", "Cookies (*.txt);;Все файлы (*)")
+        path, _ = QFileDialog.getOpenFileName(self, tr("ses.pick_file"), "", tr("ses.file_filter"))
         if not path:
             return
-        names = [s.name for s in SITES] + ["Другой сайт…"]
-        choice, ok = QInputDialog.getItem(self, "Сайт", "Для какого сайта эти cookies?", names, 0, False)
+        other = tr("ses.other_ellipsis")
+        names = [s.name for s in SITES] + [other]
+        choice, ok = QInputDialog.getItem(self, tr("ses.site_title"), tr("ses.site_prompt"), names, 0, False)
         if not ok:
             return
-        if choice == "Другой сайт…":
-            host, ok = QInputDialog.getText(self, "Домен", "Домен сайта (например example.com):")
+        if choice == other:
+            host, ok = QInputDialog.getText(self, tr("ses.domain_title"), tr("ses.domain_prompt"))
             if not ok or not host.strip():
                 return
             site_key = f"custom:{host.strip().lower()}"
         else:
             site_key = next(s.key for s in SITES if s.name == choice)
-        pname, ok = QInputDialog.getText(self, "Название профиля", "Название:", text=self._next_name(site_key))
+        pname, ok = QInputDialog.getText(self, tr("ses.name_title"), tr("ses.name_short"), text=self._next_name(site_key))
         if not ok or not pname.strip():
             return
         try:
             self.sm.import_netscape_file(site_key, pname.strip(), path)
         except (ValueError, OSError) as exc:
-            QMessageBox.warning(self, "Импорт cookies", str(exc))
+            QMessageBox.warning(self, tr("ses.import_title"), str(exc))
 
     def _rename(self, pid: str, old: str) -> None:
-        name, ok = QInputDialog.getText(self, "Переименовать", "Новое название:", text=old)
+        name, ok = QInputDialog.getText(self, tr("ses.rename_title"), tr("ses.new_name"), text=old)
         if ok and name.strip():
             self.sm.rename(pid, name.strip())
 
     def _delete(self, pid: str, name: str) -> None:
-        if QMessageBox.question(self, "Удалить профиль", f"Удалить профиль «{name}» вместе с сохранёнными cookies?") \
+        if QMessageBox.question(self, tr("ses.delete_title"), tr("ses.delete_text", name=name)) \
                 == QMessageBox.StandardButton.Yes:
             self.sm.delete(pid)

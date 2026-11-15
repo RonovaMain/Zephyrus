@@ -1,12 +1,13 @@
 """Вкладка «⚙️ Настройки»."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QRectF, QSize, Qt, QUrl
+from PyQt6.QtCore import QLocale, QRectF, QSize, Qt, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (QAbstractButton, QColorDialog, QFileDialog, QHBoxLayout, QLineEdit, QMessageBox,
                              QPushButton, QSpinBox, QVBoxLayout, QWidget)
 
 from ..context import AppContext
+from ..i18n import LANGUAGES, current_language, resolve_language, tr
 from ..paths import APP_AUTHOR, APP_GITHUB_URL, APP_NAME, APP_VERSION, BIN_DIR, DATA_DIR
 from ..theme import ACCENTS, theme
 from ..utils import open_folder
@@ -87,15 +88,15 @@ class SettingsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(36, 30, 36, 30)
         root.setSpacing(18)
-        root.addWidget(page_header("Настройки", "Папка, оформление, параметры загрузки и движок."))
+        root.addWidget(page_header(tr("set.title"), tr("set.subtitle")))
 
         # --- папка ---
-        card, lay = section("Папка загрузок")
+        card, lay = section(tr("set.sec_folder"))
         row = QHBoxLayout()
         self.dir_edit = QLineEdit()
         self.dir_edit.setReadOnly(True)
-        self.dir_btn = QPushButton("Выбрать…")
-        self.open_dir_btn = QPushButton("📂  Открыть")
+        self.dir_btn = QPushButton(tr("set.choose"))
+        self.open_dir_btn = QPushButton("📂  " + tr("set.open"))
         for b in (self.dir_btn, self.open_dir_btn):
             b.setMinimumHeight(44)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -106,76 +107,85 @@ class SettingsPage(QWidget):
         root.addWidget(card)
 
         # --- оформление ---
-        card, lay = section("Оформление")
-        self.mode_seg = Segmented(["☀️  Светлая", "🌙  Тёмная", "🖥  Система"])
+        card, lay = section(tr("set.sec_look"))
+        self.mode_seg = Segmented(["☀️  " + tr("set.mode_light"), "🌙  " + tr("set.mode_dark"), "🖥  " + tr("set.mode_system")])
         self.mode_seg.setFixedWidth(430)
-        lay.addWidget(setting_row("Тема", "Светлая, тёмная или как в системе", self.mode_seg))
+        lay.addWidget(setting_row(tr("set.theme"), tr("set.theme_desc"), self.mode_seg))
         sw_box = QWidget()
         sw_lay = QHBoxLayout(sw_box)
         sw_lay.setContentsMargins(0, 0, 0, 0)
         sw_lay.setSpacing(4)
         self.swatches: list[AccentSwatch] = []
-        for key, (name, _a, _b) in ACCENTS.items():
-            sw = AccentSwatch(key, name)
+        for key in ACCENTS:
+            sw = AccentSwatch(key, tr(f"acc.{key}"))
             self.swatches.append(sw)
             sw_lay.addWidget(sw)
-        self.custom_sw = AccentSwatch("custom", "Свой цвет…")
+        self.custom_sw = AccentSwatch("custom", tr("set.custom_color"))
         self.swatches.append(self.custom_sw)
         sw_lay.addWidget(self.custom_sw)
-        lay.addWidget(setting_row("Акцентный оттенок", "Фирменная «Сакура» — нежно-розовый с небесным переливом", sw_box))
+        lay.addWidget(setting_row(tr("set.accent"), tr("set.accent_desc"), sw_box))
+        root.addWidget(card)
+
+        # --- язык ---
+        card, lay = section(tr("set.sec_lang"))
+        self.lang_combo = make_combo([(tr("set.lang_auto"), "auto")] + [(name, code) for code, name in LANGUAGES.items()])
+        self.lang_combo.setMinimumWidth(240)
+        lay.addWidget(setting_row(tr("set.language"), tr("set.language_desc"), self.lang_combo))
         root.addWidget(card)
 
         # --- загрузка ---
-        card, lay = section("Загрузка по умолчанию")
+        card, lay = section(tr("set.sec_download"))
         self.container = make_combo([("MP4", "mp4"), ("MKV", "mkv"), ("WEBM", "webm")])
         self.audio_fmt = make_combo([("MP3", "mp3"), ("M4A", "m4a"), ("OPUS", "opus"), ("FLAC", "flac"), ("WAV", "wav")])
         for c in (self.container, self.audio_fmt):
             c.setMinimumWidth(140)
-        lay.addWidget(setting_row("Контейнер видео", "Итоговый формат файла при выборе «Видео»", self.container))
-        lay.addWidget(setting_row("Формат аудио", "Кодек при выборе «Аудио»", self.audio_fmt))
+        lay.addWidget(setting_row(tr("set.container"), tr("set.container_desc"), self.container))
+        lay.addWidget(setting_row(tr("set.audio_fmt"), tr("set.audio_fmt_desc"), self.audio_fmt))
         self.t_thumb = ToggleSwitch()
         self.t_meta = ToggleSwitch()
         self.t_subs = ToggleSwitch()
         self.t_sponsor = ToggleSwitch()
-        lay.addWidget(setting_row("Встраивать обложку", "Картинка видео/трека внутри файла", self.t_thumb))
-        lay.addWidget(setting_row("Записывать метаданные", "Название, автор, описание, главы", self.t_meta))
-        lay.addWidget(setting_row("Встраивать субтитры", "Только для видео", self.t_subs))
+        lay.addWidget(setting_row(tr("set.thumb"), tr("set.thumb_desc"), self.t_thumb))
+        lay.addWidget(setting_row(tr("set.meta"), tr("set.meta_desc"), self.t_meta))
+        lay.addWidget(setting_row(tr("set.subs"), tr("set.subs_desc"), self.t_subs))
         self.subs_langs = QLineEdit()
         self.subs_langs.setPlaceholderText("ru,en")
         self.subs_langs.setMinimumWidth(180)
-        lay.addWidget(setting_row("Языки субтитров", "Коды через запятую", self.subs_langs))
-        lay.addWidget(setting_row("SponsorBlock", "Вырезать рекламу и самопромо в YouTube-видео", self.t_sponsor))
+        lay.addWidget(setting_row(tr("set.subs_langs"), tr("set.subs_langs_desc"), self.subs_langs))
+        lay.addWidget(setting_row(tr("set.sponsor"), tr("set.sponsor_desc"), self.t_sponsor))
         self.template = QLineEdit()
         self.template.setMinimumWidth(300)
-        lay.addWidget(setting_row("Шаблон имени файла", "Синтаксис yt-dlp, например %(title)s [%(id)s].%(ext)s", self.template))
+        lay.addWidget(setting_row(tr("set.template"), tr("set.template_desc"), self.template))
         root.addWidget(card)
 
         # --- сеть ---
-        card, lay = section("Сеть")
+        card, lay = section(tr("set.sec_net"))
         self.rate = QLineEdit()
-        self.rate.setPlaceholderText("без ограничений, напр. 5M")
+        self.rate.setPlaceholderText(tr("set.rate_ph"))
         self.rate.setMinimumWidth(220)
         self.frag = QSpinBox()
         self.frag.setRange(1, 16)
         self.frag.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.frag.setFixedWidth(90)
         self.proxy = QLineEdit()
-        self.proxy.setPlaceholderText("http://host:port или socks5://…")
+        self.proxy.setPlaceholderText(tr("set.proxy_ph"))
         self.proxy.setMinimumWidth(260)
-        lay.addWidget(setting_row("Ограничение скорости", "Например 500K или 5M", self.rate))
-        lay.addWidget(setting_row("Потоков фрагментов", "Ускоряет загрузку HLS/DASH (1–16)", self.frag))
-        lay.addWidget(setting_row("Прокси", "Оставьте пустым, если не нужен", self.proxy))
+        lay.addWidget(setting_row(tr("set.rate"), tr("set.rate_desc"), self.rate))
+        lay.addWidget(setting_row(tr("set.frag"), tr("set.frag_desc"), self.frag))
+        lay.addWidget(setting_row(tr("set.proxy"), tr("set.proxy_desc"), self.proxy))
         self.t_notify = ToggleSwitch()
-        lay.addWidget(setting_row("Уведомления", "Сообщение в трее, когда загрузка завершена", self.t_notify))
+        lay.addWidget(setting_row(tr("set.notify"), tr("set.notify_desc"), self.t_notify))
         root.addWidget(card)
 
         # --- движок ---
-        card, lay = section("Движок")
+        card, lay = section(tr("set.sec_engine"))
         self.ver_yt = make_label("…", "RowTitle")
         self.ver_ff = make_label("…", "RowTitle")
-        lay.addWidget(setting_row("yt-dlp", "Рабочая копия в LOCALAPPDATA\\Zephyrus\\bin", self.ver_yt))
-        lay.addWidget(setting_row("FFmpeg", "Используется для объединения и конвертации", self.ver_ff))
-        self.update_btn = GradientButton("🔄   Обновить движок")
+        lay.addWidget(setting_row("yt-dlp", tr("set.ytdlp_desc", path=BIN_DIR), self.ver_yt))
+        lay.addWidget(setting_row("FFmpeg", tr("set.ffmpeg_desc"), self.ver_ff))
+        self.t_autoupd = ToggleSwitch()
+        lay.addWidget(setting_row(tr("set.auto_update"), tr("set.auto_update_desc"), self.t_autoupd))
+        self.update_btn = GradientButton("🔄   " + tr("set.update_btn"))
         self.update_btn.setMinimumHeight(46)
         lay.addWidget(self.update_btn)
         self.upd_bar = GradientProgressBar()
@@ -184,19 +194,19 @@ class SettingsPage(QWidget):
         self.upd_status = make_label("", "Dim", wrap=True)
         self.upd_status.hide()
         lay.addWidget(self.upd_status)
-        self.data_btn = QPushButton("📁  Открыть папку данных")
+        self.data_btn = QPushButton("📁  " + tr("set.open_data"))
         self.data_btn.setObjectName("Small")
         self.data_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         lay.addWidget(self.data_btn, 0, Qt.AlignmentFlag.AlignLeft)
         root.addWidget(card)
 
         # --- о программе ---
-        card, lay = section("О программе")
+        card, lay = section(tr("set.sec_about"))
         lay.addWidget(make_label(f"{APP_NAME} {APP_VERSION}", "RowTitle"))
-        lay.addWidget(make_label("Медиа-загрузчик на базе yt-dlp и FFmpeg.", "Dim"))
+        lay.addWidget(make_label(tr("set.about_text"), "Dim"))
         author = QHBoxLayout()
         author.setSpacing(10)
-        author.addWidget(make_label("Автор:", "Dim"))
+        author.addWidget(make_label(tr("set.author"), "Dim"))
         author.addWidget(make_label(APP_AUTHOR, "Pill"))
         self.github_btn = QPushButton("GitHub  ↗")
         self.github_btn.setObjectName("Small")
@@ -205,11 +215,11 @@ class SettingsPage(QWidget):
             self.github_btn.setToolTip(APP_GITHUB_URL)
         else:
             self.github_btn.setEnabled(False)
-            self.github_btn.setToolTip("Ссылка не указана: впишите APP_GITHUB_URL в zephyrus/paths.py")
+            self.github_btn.setToolTip(tr("set.github_tip"))
         author.addWidget(self.github_btn)
         author.addStretch(1)
         lay.addLayout(author)
-        self.reset_btn = QPushButton("Сбросить настройки")
+        self.reset_btn = QPushButton(tr("set.reset"))
         self.reset_btn.setObjectName("Danger")
         self.reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         lay.addWidget(self.reset_btn, 0, Qt.AlignmentFlag.AlignLeft)
@@ -220,7 +230,7 @@ class SettingsPage(QWidget):
     def _load(self) -> None:
         s = self.s
         widgets = [self.mode_seg, self.container, self.audio_fmt, self.t_thumb, self.t_meta, self.t_subs,
-                   self.t_sponsor, self.t_notify, self.subs_langs, self.template, self.rate, self.frag, self.proxy]
+                   self.t_sponsor, self.t_notify, self.t_autoupd, self.lang_combo, self.subs_langs, self.template, self.rate, self.frag, self.proxy]
         for w in widgets:
             w.blockSignals(True)
         self.dir_edit.setText(s.get("download_dir"))
@@ -234,6 +244,8 @@ class SettingsPage(QWidget):
         self.t_subs.setChecked(s.get("embed_subs"))
         self.t_sponsor.setChecked(s.get("sponsorblock"))
         self.t_notify.setChecked(s.get("notifications"))
+        self.t_autoupd.setChecked(s.get("engine_auto_update"))
+        set_combo_data(self.lang_combo, s.get("language"))
         self.subs_langs.setText(s.get("subs_langs"))
         self.template.setText(s.get("filename_template"))
         self.rate.setText(s.get("rate_limit"))
@@ -252,12 +264,14 @@ class SettingsPage(QWidget):
         self.container.currentIndexChanged.connect(lambda: s.set("video_container", self.container.currentData()))
         self.audio_fmt.currentIndexChanged.connect(lambda: s.set("audio_format", self.audio_fmt.currentData()))
         for key, tog in (("embed_thumbnail", self.t_thumb), ("embed_metadata", self.t_meta), ("embed_subs", self.t_subs),
-                         ("sponsorblock", self.t_sponsor), ("notifications", self.t_notify)):
+                         ("sponsorblock", self.t_sponsor), ("notifications", self.t_notify),
+                         ("engine_auto_update", self.t_autoupd)):
             tog.toggled.connect(lambda on, k=key: s.set(k, on))
         for key, edit in (("subs_langs", self.subs_langs), ("filename_template", self.template),
                           ("rate_limit", self.rate), ("proxy", self.proxy)):
             edit.editingFinished.connect(lambda k=key, e=edit: s.set(k, e.text().strip()))
         self.frag.valueChanged.connect(lambda v: s.set("fragments", v))
+        self.lang_combo.currentIndexChanged.connect(self._on_language)
         self.update_btn.clicked.connect(self._update_engine)
         self.data_btn.clicked.connect(lambda: open_folder(str(DATA_DIR)))
         self.github_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(APP_GITHUB_URL)))
@@ -286,7 +300,7 @@ class SettingsPage(QWidget):
 
     def _pick_accent(self, sw: AccentSwatch) -> None:
         if sw.key == "custom":
-            color = QColorDialog.getColor(QColor(self.s.get("accent_custom")), self, "Свой акцентный цвет")
+            color = QColorDialog.getColor(QColor(self.s.get("accent_custom")), self, tr("set.custom_title"))
             if not color.isValid():
                 self._select_swatch(self.s.get("accent"))
                 return
@@ -295,9 +309,19 @@ class SettingsPage(QWidget):
             self._set_theme(accent=sw.key)
         self._select_swatch(self.s.get("accent"))
 
+    # ------------------------------------------------------------ язык
+    def _on_language(self) -> None:
+        code = self.lang_combo.currentData() or "auto"
+        self.s.set("language", code)
+        if resolve_language(code, QLocale.system().uiLanguages()) == current_language():
+            return
+        if QMessageBox.question(self, tr("set.restart_title"), tr("set.restart_text")) == QMessageBox.StandardButton.Yes:
+            self.ctx.restart_requested = True   # main.py перезапустит программу после закрытия окна
+            self.window().close()
+
     # ------------------------------------------------------------ папка
     def _choose_dir(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Папка для загрузок", self.s.get("download_dir"))
+        path = QFileDialog.getExistingDirectory(self, tr("set.pick_dir"), self.s.get("download_dir"))
         if path:
             self.s.set("download_dir", path)
             self.dir_edit.setText(path)
@@ -310,7 +334,7 @@ class SettingsPage(QWidget):
 
     def _update_engine(self) -> None:
         if self.ctx.downloads.is_busy():
-            QMessageBox.information(self, APP_NAME, "Сначала дождитесь завершения текущей загрузки или отмените её.")
+            QMessageBox.information(self, APP_NAME, tr("set.wait_dl"))
             return
         self.update_btn.setEnabled(False)
         self.upd_bar.reset()
@@ -334,8 +358,7 @@ class SettingsPage(QWidget):
             self.upd_bar.hide()
 
     def _reset(self) -> None:
-        if QMessageBox.question(self, "Сброс", "Вернуть все настройки к значениям по умолчанию?\n"
-                                "История и профили cookies не затрагиваются.") != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, tr("set.reset_title"), tr("set.reset_text")) != QMessageBox.StandardButton.Yes:
             return
         self.s.reset()
         self._load()

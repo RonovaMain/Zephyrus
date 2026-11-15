@@ -14,6 +14,8 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .i18n import tr
+
 _IS_WIN = sys.platform.startswith("win")
 
 
@@ -79,7 +81,7 @@ class Vault:
             try:
                 return _unprotect(self._key_path.read_bytes())
             except OSError as exc:
-                raise VaultError("Не удалось расшифровать ключ хранилища (другой пользователь Windows?)") from exc
+                raise VaultError(tr("vault.err_key")) from exc
         key = Fernet.generate_key()
         self._key_path.parent.mkdir(parents=True, exist_ok=True)
         self._key_path.write_bytes(_protect(key))
@@ -96,4 +98,4 @@ class Vault:
         try:
             return self._fernet.decrypt(token)
         except InvalidToken as exc:
-            raise VaultError("Файл профиля повреждён или зашифрован другим ключом") from exc
+            raise VaultError(tr("vault.err_profile")) from exc

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import platform
@@ -22,12 +23,19 @@ from typing import Callable
 from PyQt6.QtCore import QObject, QProcess, QUrl, pyqtSignal
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
+from .i18n import tr
 from .paths import (APP_VERSION, BIN_DIR, ENGINE_FILES, FFMPEG_NAME, IS_WINDOWS, YTDLP_NAME,
                     bundled_bin_dirs)
 
 log = logging.getLogger(__name__)
 
 RELEASE_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
+LATEST_API = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
+
+
+def version_key(text: str) -> tuple[int, ...]:
+    """'2026.11.10' и '2026.11.10.232748' -> (2026, 11, 10): сравниваем даты релизов."""
+    return tuple(int(x) for x in re.findall(r"\d+", text or "")[:3])
 
 
 def _release_asset_name() -> str:
@@ -116,7 +124,7 @@ class EngineManager(QObject):
         result: dict[str, str] = {}
 
         def got(key: str, value: str) -> None:
-            result[key] = value or "не найден"
+            result[key] = value or tr("set.not_found")
             if len(result) == 2:
                 callback(result["yt"], result["ff"])
 
@@ -132,12 +140,28 @@ class EngineManager(QObject):
         req.setTransferTimeout(30_000)
         return self._nam.get(req)
 
+    def check_latest(self, callback: Callable[[str], None]) -> None:
+        """Асинхронно узнать тег последнего релиза yt-dlp (пустая строка — не удалось)."""
+        reply = self._get(LATEST_API)
+
+        def done() -> None:
+            reply.deleteLater()
+            tag = ""
+            if reply.error() == QNetworkReply.NetworkError.NoError:
+                try:
+                    tag = str(json.loads(bytes(reply.readAll()).decode("utf-8", "replace")).get("tag_name") or "")
+                except (ValueError, AttributeError):
+                    tag = ""
+            callback(tag)
+
+        reply.finished.connect(done)
+
     def update_ytdlp(self) -> None:
         if self._updating:
             return
         self._updating = True
         self.updateProgress.emit(0)
-        self.updateStatus.emit("Получение контрольных сумм…")
+        self.updateStatus.emit(tr("eng.sums"))
         reply = self._get(RELEASE_BASE + "SHA2-256SUMS")
         reply.finished.connect(lambda: self._on_sums(reply))
 
@@ -149,7 +173,7 @@ class EngineManager(QObject):
     def _on_sums(self, reply: QNetworkReply) -> None:
         reply.deleteLater()
         if reply.error() != QNetworkReply.NetworkError.NoError:
-            return self._fail(f"Не удалось получить контрольные суммы: {reply.errorString()}")
+            return self._fail(tr("eng.err_sums", err=reply.errorString()))
         asset = _release_asset_name()
         expected = ""
         for line in bytes(reply.readAll()).decode("utf-8", "replace").splitlines():
@@ -157,14 +181,14 @@ class EngineManager(QObject):
             if len(parts) == 2 and parts[1].lstrip("*") == asset:
                 expected = parts[0].lower()
         if not expected:
-            return self._fail(f"В релизе нет контрольной суммы для {asset}")
+            return self._fail(tr("eng.no_hash", asset=asset))
         self._expected_hash = expected
         self._tmp_path = BIN_DIR / (YTDLP_NAME + ".download")
         try:
             self._tmp_file = open(self._tmp_path, "wb")
         except OSError as exc:
-            return self._fail(f"Нет доступа к папке движка: {exc}")
-        self.updateStatus.emit("Скачивание yt-dlp…")
+            return self._fail(tr("eng.err_folder", err=exc))
+        self.updateStatus.emit(tr("eng.downloading"))
         self._reply = self._get(RELEASE_BASE + asset)
         self._reply.readyRead.connect(self._on_chunk)
         self._reply.downloadProgress.connect(self._on_dl_progress)
@@ -199,18 +223,18 @@ class EngineManager(QObject):
             return
         reply.deleteLater()
         if reply.error() != QNetworkReply.NetworkError.NoError:
-            return self._fail(f"Ошибка загрузки: {reply.errorString()}")
+            return self._fail(tr("eng.err_dl", err=reply.errorString()))
         self._on_chunk_remaining(reply)
         self._tmp_file.close()
         self._tmp_file = None
-        self.updateStatus.emit("Проверка целостности…")
+        self.updateStatus.emit(tr("eng.verifying"))
 
         digest = hashlib.sha256()
         with open(self._tmp_path, "rb") as fh:
             for block in iter(lambda: fh.read(1 << 20), b""):
                 digest.update(block)
         if digest.hexdigest() != self._expected_hash or self._tmp_path.stat().st_size < 2_000_000:
-            return self._fail("Контрольная сумма не совпала — файл не установлен")
+            return self._fail(tr("eng.err_hash"))
 
         target = self.ytdlp_path
         try:
@@ -218,10 +242,10 @@ class EngineManager(QObject):
                 self._tmp_path.chmod(0o755)
             os.replace(self._tmp_path, target)
         except OSError as exc:
-            return self._fail(f"Не удалось заменить файл (закройте активные загрузки): {exc}")
+            return self._fail(tr("eng.err_replace", err=exc))
         self._updating = False
         self.updateProgress.emit(100)
-        self.updateFinished.emit(True, "Движок обновлён до последней версии")
+        self.updateFinished.emit(True, tr("eng.updated"))
 
     def _on_chunk_remaining(self, reply: QNetworkReply) -> None:
         rest = bytes(reply.readAll())
